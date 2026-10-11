@@ -1,0 +1,29 @@
+# Raw sequencing data
+data/
+*.bam
+*.bai
+*.cram
+*.crai
+*.fastq
+*.fastq.gz
+*.fasta
+*.fa
+
+# Analysis results
+results/
+logs/
+
+# Snakemake
+.snakemake/
+
+# Python
+__pycache__/
+*.pyc
+
+# Credentials
+.env
+*.pem
+*.key
+
+# Temporary files
+*.tmp
