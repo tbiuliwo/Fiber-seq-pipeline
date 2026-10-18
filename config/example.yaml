@@ -1,0 +1,76 @@
+# Copy and edit paths before using on another machine.
+input_mode: modified
+input_aligned: false
+reference: /path/to/reference.fa
+reference_name: hg38
+extract_coordinates: reference
+samples:
+  sample01: /path/to/sample01.HiFi.bam
+threads:
+  align: 8
+  predict_m6a: 8
+  fire: 8
+  fire_peaks: 8
+  extract: 4
+  qc: 4
+  fiberhmm: 4
+  fiberfold: 4
+  ctcf: 4
+  fiberfold_inputs: 4
+results_dir: results
+logs_dir: logs
+tools:
+  bin_dir: null
+  python: python
+qc:
+  autocorrelation: true
+fiberhmm:
+  enabled: false
+fiberfold:
+  enabled: false
+  script: /path/to/fiberFold/predict.py
+  model: /path/to/fiberFold/model.ckpt
+  prepare_inputs: true
+  window_step: 2097152
+fire_peaks:
+  enabled: true
+  max_fdr: 0.05
+  min_fire_fraction: 0.1
+  min_coverage: 4
+  sd_coverage: 5
+  mem_mb: 128000
+  seed: 42
+  # Supply matching gap/blacklist/segmental-duplication BED(.gz) files.
+  exclude: []
+  # Only needed by the optional prepare_fire_peaks export target.
+  reference_fasta: /path/to/reference.fa
+ctcf:
+  enabled: false
+  reference_fasta: /path/to/reference.fa
+  motifs: null
+  motif_url: https://expdata.cmmt.ubc.ca/JASPAR/downloads/UCSC_tracks/2022/hg38/MA0139.1.tsv.gz
+  min_score: 0
+  chromosomes:
+  - chr1
+  - chr2
+  - chr3
+  - chr4
+  - chr5
+  - chr6
+  - chr7
+  - chr8
+  - chr9
+  - chr10
+  - chr11
+  - chr12
+  - chr13
+  - chr14
+  - chr15
+  - chr16
+  - chr17
+  - chr18
+  - chr19
+  - chr20
+  - chr21
+  - chr22
+  - chrX

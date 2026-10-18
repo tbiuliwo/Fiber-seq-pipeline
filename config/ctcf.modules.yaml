@@ -1,0 +1,5 @@
+# FiberFold MA0139.1 modules: zero-based, half-open.
+modules:
+  - [0, 6]
+  - [6, 13]
+  - [13, 19]

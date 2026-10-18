@@ -8,10 +8,24 @@ data/
 *.fastq.gz
 *.fasta
 *.fa
+*.fasta.gz
+*.fa.gz
+*.fai
+*.gzi
+*.mmi
 
 # Analysis results
 results/
 logs/
+/test_run/
+*.bw
+*.pkl
+
+# Machine-specific configuration (publish config/example.yaml instead)
+/config/config.yaml
+
+# Model checkpoints
+*.ckpt
 
 # Snakemake
 .snakemake/
