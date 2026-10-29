@@ -44,8 +44,5 @@ __pycache__/
 
 # Temporary files
 *.tmp
-# Keep existing local notes ignored, but version the optional-branch instructions.
-/docs/*
-!/docs/phasing.md
-!/docs/methylation.md
-!/docs/workflow_renumbering.md
+# Local development notes
+/docs/
