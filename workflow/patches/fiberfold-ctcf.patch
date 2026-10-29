@@ -1,0 +1,54 @@
+diff --git a/misc/encodeFP.py b/misc/encodeFP.py
+index ba1da5b..ddc28f3 100644
+--- a/misc/encodeFP.py
++++ b/misc/encodeFP.py
+@@ -1,3 +1,4 @@
++import sys
+ import numpy as np
+ from tqdm import tqdm
+ import pyBigWig
+@@ -77,7 +78,8 @@ bw = pyBigWig.open(out_file,'w')
+ bw.addHeader(chromsizes)
+ 
+ 
+-for c in chromsizes[:-3]:
++# The supplied chromsizes file defines which chromosomes to process.
++for c in chromsizes:
+     chrom=c[0]
+     with gzip.open(fp_file,'rt') as handle:
+         all_out_vals = []
+@@ -86,12 +88,6 @@ for c in chromsizes[:-3]:
+     #     current_chrom = None
+         for line in tqdm(handle):
+ 
+-            if 'chrY' in line:
+-                continue
+-            if 'chrM' in line:
+-                continue
+-            if 'chrEBV' in line:
+-                continue
+             if "#" in line: 
+                 continue
+                
+@@ -113,7 +109,11 @@ for c in chromsizes[:-3]:
+         ne = np.array(all_out_ends)
+         nv = np.array(all_out_vals)
+         nc = np.array(all_out_chroms)
+-        bw.addEntries(list(nc),list(ns.astype(int)),list(ne.astype(int)),list(nv.astype(float)))
++        if len(nc):
++            bw.addEntries(list(nc),list(ns.astype(int)),list(ne.astype(int)),list(nv.astype(float)))
++        else:
++            # Header-only bigWigs return [] rather than one value per base.
++            bw.addEntries([chrom], [0], ends=[c[1]], values=[0.0])
+             
+             
+ bw.close()        
+diff --git a/misc/encodeMotifDirection.py b/misc/encodeMotifDirection.py
+index ff66b1e..2e68a0c 100644
+--- a/misc/encodeMotifDirection.py
++++ b/misc/encodeMotifDirection.py
+@@ -1,3 +1,4 @@
++import sys
+ import numpy as np 
+ import pickle as pkl 
+ import matplotlib.pyplot as plt

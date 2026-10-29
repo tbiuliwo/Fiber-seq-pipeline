@@ -8,6 +8,8 @@ m6A/5mC input. Run commands from this repository's root.
 ```text
 shared reference indexing + pbmm2 HIFI alignment + sorting,
      or samtools sorting for aligned input
+  -> keep chr1–chr22 + chrX + chrY (reads and BAM reference header)
+  -> optional step-02 DeepVariant -> WhatsHap phase -> aligned-BAM haplotagging
   -> m6A prediction / nucleosome + MSP annotation / reuse existing annotations
   -> basic ft qc (optional autocorrelation)
   -> single-molecule FIRE -> indexed BAM
@@ -16,10 +18,12 @@ shared reference indexing + pbmm2 HIFI alignment + sorting,
                          -> optional FiberHMM footprint BAM + index
 
 alignment -> samtools flagstat + stats
+phased VCF + indexed aligned BAM -> haplotagged aligned BAM + phasing statistics
+indexed FIRE BAM -> MethBat 5mC pileup + plotting tracks (step 08)
 indexed FIRE BAM -> automatic FIRE/CpG tracks + prediction windows
 all four feature tracks + model -> optional FiberFold predictions
 indexed FIRE BAM + CTCF motifs -> footprint fractions + shared direction bigWigs
-indexed FIRE BAMs -> optional prepare_fire_peaks -> official FIRE config + manifest
+indexed FIRE BAM -> official FIRE v0.2.0 peak-analysis rules
 ```
 
 Rule filenames are numbered in analysis order. Snakemake schedules actual
@@ -31,30 +35,31 @@ Result and log directory names match the corresponding rule filenames.
 | Rule file | Function |
 |---|---|
 | `01_align.smk` | Reference indexing, alignment and sorting |
-| `02_annotate.smk` | m6A / nucleosome / MSP annotation |
-| `03_qc.smk` | Basic QC on aligned and annotated BAMs |
-| `04_fire.smk` | Single-molecule FIRE and BAM indexing |
-| `05_fire_peaks.smk` | Shuffled-background FDR and population FIRE peaks; optional official-input export |
-| `06_extract.smk` | Export feature BEDs |
-| `07_fiberhmm.smk` | Optional general footprint analysis |
-| `08_ctcf.smk` | CTCF-specific feature tracks |
-| `09_fiberfold_inputs.smk` | FIRE/CpG tracks and model windows |
-| `10_fiberfold.smk` | Contact matrix prediction |
-| `optional/methylation.smk` | Independent 5mC/5hmC analysis |
+| `02_phasing.smk` | Optional variant calling, phasing and aligned-BAM haplotagging |
+| `03_annotate.smk` | m6A / nucleosome / MSP annotation |
+| `04_qc.smk` | Basic QC on aligned and annotated BAMs |
+| `05_fire.smk` | Single-molecule FIRE and BAM indexing |
+| `06_fire_peaks.smk` | Direct invocation of the official FIRE Snakefile |
+| `07_extract.smk` | Export feature BEDs |
+| `08_methylation.smk` | MethBat 5mC pileup, summary and indexed bedGraph tracks |
+| `09_fiberhmm.smk` | Optional general footprint analysis |
+| `10_ctcf.smk` | CTCF-specific feature tracks |
+| `11_fiberfold_inputs.smk` | FIRE/CpG tracks and model windows |
+| `12_fiberfold.smk` | Contact matrix prediction |
 
 Peak calling is enabled by default and can also be selected with the `fire_peaks`
-target. Official-pipeline input export remains an explicit `prepare_fire_peaks` target. QC reports
-statistics and does not act as a pass/fail gate for downstream analyses.
-The optional methylation module defaults to off and is not a FiberFold
-dependency; enabling it requires `methbat` and `threads.methylation`.
+target. QC reports statistics and does not act as a pass/fail gate for downstream analyses.
+Step 08 is independent of FiberFold. It is enabled in the local config and
+disabled in the portable example; it requires MethBat, bgzip and tabix.
 
 ## Software
 
 Activate an analysis environment with `pbmm2`, `samtools`, `ft`, Python and
-`pysam`. FIRE peak calling additionally requires `bedtools`, `bgzip`, `tabix`
-and an `ft` version supporting `call-peaks --fdr-table` (the local version is
-0.13.1). Background construction and FDR accumulation use streaming Python
-scripts and do not require the full official FIRE workflow or its R environment.
+`pysam`. Step 06 launches the official FIRE workflow through Pixi. Configure
+`fire_peaks.fire_dir`, `fire_peaks.pixi` and, optionally, `fire_peaks.conda_prefix`.
+The official workflow manages its own Conda environments, including R for its
+reports. The outer workflow does not need `--sdm conda` for step 06. Preparation
+uses `samtools` from `tools.bin_dir`, or the active PATH when that setting is null.
 FiberFold input preparation also requires `pyBigWig` and
 `pb-CpG-tools` (3.0.0 is installed in the local fiberseq environment). Optional branches require `fiberhmm-call` or the FiberFold Python
 stack and model. Snakemake may be installed separately.
@@ -89,6 +94,14 @@ Set `input_aligned: false` to run `pbmm2 align --preset HIFI --sort` using
 `reference` (FASTA or a HIFI-compatible pbmm2 .mmi). Already aligned input
 is sorted into a new BAM in the results directory. Use already aligned input for `annotated` mode to avoid remapping interval annotations.
 
+`analysis_chromosomes` is the exact post-alignment chromosome whitelist, defaulting
+to chr1–chr22, chrX and chrY. The complete `.aligned.bam` is retained; downstream
+analyses and QC use `.chromosomes.bam`, which excludes unmapped records and
+all other references from both reads and the BAM header. Missing selected
+references cause an error. Changing this list requires recomputing downstream
+results; the existing alignment can be reused. Keep `ctcf.chromosomes` within
+this whitelist.
+
 All samples in one run share an input mode. Use separate configs for mixed
 input types. FASTQ and subreads are not substitutes for HiFi kinetics BAMs.
 The default `modified` mode uses existing m6A calls rather than re-predicting
@@ -103,17 +116,20 @@ is not separately exported by this workflow.
 ## Outputs
 
 - `01_align/`: sorted aligned BAM; `reference/` contains the reusable pbmm2 index.
-- `02_annotate/`: annotated BAM, for hifi/modified modes.
-- `03_qc/`: ft QC table (with autocorrelation by default), flagstat and stats.
-- `04_fire/`: single-molecule FIRE BAM and BAI.
-- `05_fire_peaks/`: per-sample `.peaks.bed.gz` + `.tbi`, `.fdr.tsv`, shuffled
-  fibers, exclusion masks and coverage summaries; optional official config/manifest.
-- `06_extract/`: m6a/cpg/nuc/msp/fire `.bed.gz` files.
-- `07_fiberhmm/`: optional footprint BAM and BAI.
-- `08_ctcf/`: CTCF motif BED, footprint tables/fractions and chromosome bigWigs.
-- `09_fiberfold_inputs/`: FIRE/CpG bigWigs, raw CpG scores and prediction windows.
-- `10_fiberfold/`: optional prediction pickle.
-- `optional/methylation/`: independent optional 5mC/5hmC analysis.
+- `02_phasing/<alias>/`: optional variant calls, phased VCF, aligned BAM with
+  haplotype labels and index, phasing statistics and retained intermediates.
+- `03_annotate/`: annotated BAM, for hifi/modified modes.
+- `04_qc/`: ft QC table (with autocorrelation by default), flagstat and stats.
+- `05_fire/`: single-molecule FIRE BAM and BAI.
+- `06_fire_peaks/`: official FIRE work directory; its `results/` contains per-sample
+  CRAM, peaks, pileup, FDR, TrackHub and figures.
+- `07_extract/`: m6a/cpg/nuc/msp/fire `.bed.gz` files.
+- `08_methylation/`: 5mC site BED and index, summary JSON, and 0–100% bedGraph
+  plotting track and index. 5hmC outputs are not required or generated.
+- `09_fiberhmm/`: optional footprint BAM and BAI; `qc/` contains JSON/TSV/PNG/PDF reports.
+- `10_ctcf/`: CTCF motif BED, footprint tables/fractions and chromosome bigWigs.
+- `11_fiberfold_inputs/`: FIRE/CpG bigWigs, raw CpG scores and prediction windows.
+- `12_fiberfold/`: optional prediction pickle.
 
 All paths are relative to `results_dir`. Commands have stdout/stderr logs
 under `logs_dir`. QC gathers statistics; it does not filter reads or create
@@ -121,12 +137,78 @@ a separate “QC-passed BAM”. Full runs produce large BAM and BED files.
 
 ## Optional branches
 
+### Step 02: haplotype phasing
+
+Set `phasing.enabled: true` to include DeepVariant PACBIO calling, WhatsHap
+diploid phasing, phasing statistics and aligned-BAM haplotagging in the main target.
+Both the local config and portable example leave it disabled. All three stages
+use step-01 chromosome-filtered BAMs. Selected samples then use the new
+haplotagged BAM as input to step-03 annotation, or directly to downstream
+analysis in annotated mode. Disabled or unselected samples bypass phasing.
+
+```bash
+# Preview only step 02 and its upstream dependencies.
+snakemake -s workflow/fiberseq.smk phasing -n -p --cores 16
+
+# Variant calling only, preserving the earlier target scope.
+snakemake -s workflow/fiberseq.smk variant_calls -n --cores 16
+
+# One output alias; phasing.enabled must first be true.
+snakemake -s workflow/fiberseq.smk \
+  results/02_phasing/4A/4A.haplotagged.bam.bai -n --cores 16
+```
+
+Sample IDs come from the main `samples` mapping. Configure the container,
+container bind paths, memory and optional output aliases under `phasing`, and
+threads under `threads.deepvariant` and `threads.haplotag`. WhatsHap phase uses
+one CPU per sample. The FASTA must have an existing `.fai`;
+set `phasing.reference_fasta` explicitly if the alignment reference is `.mmi`.
+Existing DeepVariant outputs were moved from the old step-13 directory without
+recalculation. Enabling phasing in a later run changes downstream BAM inputs;
+existing unphased results do not become phased results by renaming directories.
+WhatsHap is not currently installed in the local analysis environment. Install
+it there, or pass `--sdm conda` to use `workflow/envs/phasing.yaml` for the new
+rules. This environment has not been downloaded or created during integration.
+See [step-02 configuration, commands and current scope](docs/phasing.md).
+
+### Step 08: 5mC methylation
+
+`08_methylation.smk` uses indexed step-05 FIRE BAMs and runs MethBat with
+`--skip-6mA --skip-5hmC`. It requires only the 5mC site BED, tabix index and
+summary JSON, then exports and indexes bedGraph tracks for plotting. The
+bedGraph uses `Total` rows and the named `mod_score` column without rescaling
+its 0–100 values. `plotting/05_figureA/figureA.ini` points to these tracks.
+
+```bash
+snakemake -s workflow/fiberseq.smk methylation -n -p --cores 4
+```
+
+The completed results and logs have been relocated to `08_methylation/` with
+their original contents and modification times. Historical paths recorded
+inside summary JSON and logs remain unchanged as execution provenance.
+See [step-08 settings and migration notes](docs/methylation.md).
+
+The workflow now loads all 12 rule modules; optional branches are controlled
+by configuration. Numbering, results/log paths and script references were
+updated without executing any analysis or dry-run. See
+[the renumbering record](docs/workflow_renumbering.md).
+
 ### FiberHMM
 
 Set `fiberhmm.enabled: true`. The independent branch uses bundled Hia5
 PacBio models and `fiberhmm-call`. It does not replace core ft annotations
-or create the CTCF-specific bigWig needed by FiberFold. Automatic secondary
-QC is disabled for this branch; core ft QC remains available.
+or create the CTCF-specific bigWig needed by FiberFold. Automatic FiberHMM QC
+is enabled with an explicit output prefix. JSON, TSV, PNG and PDF reports are
+tracked under `09_fiberhmm/qc/<sample>.footprints.qc.*` and included in the
+default targets when FiberHMM is enabled. Install plotting support in the same
+environment as `fiberhmm-call`:
+
+```bash
+conda install -n fiberseq -c conda-forge matplotlib
+```
+
+The four reports are required outputs: if automatic QC fails or plotting support
+is missing, Snakemake reports missing outputs rather than accepting only the BAM.
 
 ### FiberFold
 
@@ -155,6 +237,15 @@ FIRE/CpG tracks are generated per sample; motif direction and windows are shared
 The selected chromosomes come from `ctcf.chromosomes` and must exist in the
 FASTA used for alignment. See `docs/fiberfold_inputs.md` for calculation details.
 
+`11_fiberfold_inputs.smk` directly calls bedtools, ft, pb-CpG-tools, tabix and
+bigtools; it no longer calls `scripts/fiberfold_inputs.py` (kept for reference).
+Set `tools.bigtools` to the converter executable; this machine reuses bigtools
+0.5.8 from the installed FIRE environment. Simple AWK conversions retain FIRE
+coverage fractions and convert CpG percentages to 0–1. Independent chromosome
+jobs write the final bigWigs; normal missing intervals are left sparse and the
+model reader replaces them with zero. CpG text-to-float conversion may differ
+from the previous bigWig-based conversion by float32 rounding.
+
 ### CTCF features
 
 `ctcf.enabled: true` adds CTCF outputs to the default targets. Enabling
@@ -170,117 +261,173 @@ The default source is the hg38 JASPAR 2022 MA0139.1 track used by the
 [FiberFold authors](https://github.com/altemoselab/fiberFold). You can set
 `ctcf.motifs` to a local BED6 or JASPAR seven-column TSV(.gz). Coordinates
 must match `ctcf.reference_fasta`; the bundled module definition requires
-19-bp motifs. Default chromosomes are chr1–chr22 and chrX. Update the list
+19-bp motifs. Default chromosomes are chr1–chr22, chrX and chrY. Update the list
 if predicting other chromosomes. No de novo motif scanning is performed.
 
-Rules sort motifs and retain the higher-scoring instance when overlapping
-19-bp motifs compete, separately on each chromosome. They then run
-`ft footprint` on each indexed FIRE BAM, with modules [0,6), [6,13), [13,19).
-The encoder reads the current table by column name rather than old fixed
-column positions. It follows the author's encodeFP.py reference-order A/T
-module-eligibility convention on both strands, for compatibility with the
-released model. A molecule qualifies if the motif is MSP-spanning (bit 0)
-and every A/T-containing module has its footprint bit set. The score is
-qualifying molecules divided by all spanning molecules, not just MSPs.
-Do not divide this fraction by coverage a second time.
+`10_ctcf.smk` directly runs the official scripts from the `misc/` directory
+beside `fiberfold.script`: `filterOverlapMotifs.py`,
+`encodeMotifDirection.py`, and `encodeFP.py`. The old `ctcf_tracks.py` is kept
+for reference but is no longer called. There is no Python launch wrapper or
+runtime source patching.
+
+Two explicit conversions are needed: source motifs become validated, sorted
+BED6 per chromosome; the current `ft footprint` table becomes the official
+13-column format by selecting named columns. Duplicate, overlapping or
+unsorted footprint rows fail instead of being silently pooled. Official
+motif filtering retains its greedy and touching-interval behavior and runs
+separately on each chromosome to avoid cross-chromosome comparisons.
+
+Both installed official encoders have a minimal static `import sys` fix.
+`encodeFP.py` also follows the supplied chromosome list instead of skipping
+the last three entries or hardcoding chrY/chrM/chrEBV exclusions. Its scoring
+functions are unchanged. For entirely empty chromosomes it writes one zero
+interval, since header-only bigWigs return empty vectors to the model reader.
+The original files, exact patch, and upstream commit are stored in
+`backups/ctcf_direct_official_20261026_220102/`.
 
 Outputs:
 
 ```text
-08_ctcf/reference/CTCF.MA0139.1.bed
-08_ctcf/<sample>.footprints.tsv.gz
-08_ctcf/<sample>.scores.tsv.gz
-08_ctcf/footprint/<sample>/chr1.bw ...
-08_ctcf/direction/chr1.bw ...
+10_ctcf/reference/CTCF.MA0139.1.bed
+10_ctcf/<sample>.footprints.tsv.gz
+10_ctcf/<sample>.footprints.legacy.tsv.gz
+10_ctcf/footprint/<sample>/chr1.bw ...
+10_ctcf/direction/chr1.bw ...
 ```
 
 Direction is +1 on forward motifs, -1 on reverse motifs and 0 elsewhere;
 it is shared across samples. Footprint tracks range from 0 to 1 and are
-sample-specific. Background and uncovered sites have value 0; the score
-table retains spanning counts to distinguish zero coverage from no footprint.
+sample-specific. Footprint background and uncovered sites remain missing in
+the official sparse output; the official model reader replaces these with 0.
+The fraction already includes depth normalization; do not divide it again.
 These motif-based scores are not experimental confirmation of CTCF binding.
 
-`scripts/ctcf_tracks.py` writes zero background without chromosome-sized
-arrays. It does not arbitrarily discard the last chromosomes. FASTA indexes
-are written inside results, leaving the source FASTA directory untouched.
+Each chromosome rule writes the official bigWig directly to its final path;
+there is no subsequent split or rewrite. FASTA links, indexes and converted
+inputs are explicit Snakemake outputs under `10_ctcf/`. Source reference
+directories are untouched. The official direction encoder uses
+chromosome-sized arrays. Logs retain `.out`/`.err` pairs, with chromosome
+names added for independent jobs.
+
+The custom `<sample>.scores.tsv.gz` is no longer a required output: the
+official scripts do not produce it and FiberFold prediction does not use it.
+Existing score files are retained as historical results and are not refreshed.
+See `docs/ctcf.md` for commands, compatibility changes and validation.
 
 ### Whole-genome FIRE peaks
 
-The default workflow includes population-level peak calling. To run this branch
-and its upstream dependencies explicitly:
+Step 06 directly invokes `/data/tenghaohan/software/FIRE/workflow/Snakefile`
+through the official Pixi `fire` task. No coverage, background, FDR or merging
+rules are copied into the parent workflow. `06_fire_peaks.smk` only prepares
+inputs and launches the author's `all` target for the configured samples.
 
 ```bash
 snakemake -s workflow/fiberseq.smk fire_peaks -n --cores 8
-snakemake -s workflow/fiberseq.smk fire_peaks --cores 8
+snakemake -s workflow/fiberseq.smk fire_peaks --cores 8 \
+  --resources mem_mb=16000
 ```
 
-`fire_peaks.enabled: false` removes peak calling from the default targets;
-the explicit target remains available. Outputs are:
+The active analysis environment is still required for upstream steps; preparation
+uses its `samtools`. On this machine `tools.bin_dir` locates that executable
+explicitly. `fire_peaks.pixi` locates Pixi, and `fire_peaks.fire_dir` locates the
+FIRE checkout. `fire_peaks.conda_prefix` optionally reuses the installed official
+Conda environments. The local configuration reuses
+`/data/tenghaohan/software/FIRE/fire-test-data/.snakemake/conda`.
+
+The two calculation-facing rules are:
+
+1. `prepare_fire_peaks`: wait for the indexed step-05 BAMs, create an absolute-path
+   sample table and official configuration, and index a local reference symlink.
+2. `run_official_fire`: run `pixi run --manifest-path ... fire all` with that
+   configuration and an isolated working directory. Official Snakemake schedules
+   all internal jobs. The outer job's threads and memory budget are forwarded.
+
+The `fire_peaks` target selects this branch. The parent `all` target includes
+its `.complete` marker when `fire_peaks.enabled` is true. The marker is written
+only after official `all` succeeds. Peak BEDs, indexes and FDR tables are also
+explicit outputs of the wrapper. One official invocation handles all configured
+samples, avoiding competing Snakemake locks in the shared working directory.
+
+The official workflow applies its own single-molecule FIRE model and filters
+to step-05 BAMs, producing the author's filtered CRAM files. Step 05 remains
+unchanged. The complete official output set includes standard/wide/1%-FDR peaks,
+pileup, QC, TrackHub files and R figures. Peak rows retain the official
+`pass_coverage` flag. The author's existing local `awk` coordinate-rounding fix
+is used because this is the same FIRE checkout.
+
+Official work directory and representative outputs:
 
 ```text
-05_fire_peaks/<sample>.peaks.bed.gz
-05_fire_peaks/<sample>.peaks.bed.gz.tbi
-05_fire_peaks/<sample>.fdr.tsv
-05_fire_peaks/<sample>.coverage.json
+06_fire_peaks/
+  config.json
+  manifest.tsv
+  reference/genome.fa + .fai
+  .complete
+  .snakemake/
+  temp/
+  results/<sample>/
+    <sample>-fire-v0.2-filtered.cram + .crai
+    <sample>-fire-v0.2-peaks.bed.gz + .tbi
+    <sample>-fire-v0.2-pileup.bed.gz + .tbi
+    additional-outputs-v0.2/
+      fire-peaks/<sample>-v0.2-fire-score-to-fdr.tbl
+      fire-peaks/<sample>-v0.2-fire-elements.bed.gz + .tbi
+      coverage/...
+      analysis/...
+    trackHub-v0.2/...
 ```
 
-The background script extracts eligible fiber spans with `--fire-filter -F 260`
-and calculates a bp-weighted median coverage. Fibers overlapping low/high-depth
-regions by at least 20% are excluded from the shuffle. The retained fibers are
-shuffled on their original chromosomes using seed 42, avoiding uncovered regions
-and the configured assembly-gap, blacklist and segmental-duplication BEDs.
+The inner `results/` directory is the official layout, now preserved as-is. The
+old copied-rule outputs outside this directory are not moved or deleted.
+`fire_peaks.version` must match the installed FIRE version: `v0.2` uses its normal
+major/minor label, while `v0.2.0` enables the author's `full-version` setting.
 
-`ft pileup --fiber-coverage --no-msp --no-nuc --shuffle` then calculates real
-and shuffled FIRE scores with the same read filters. A streaming script builds
-score histograms weighted by genomic interval length, using 0.01-wide score bins;
-at each threshold, FDR is
-cumulative shuffled bp divided by cumulative real bp, capped at 1. Thresholds
-are retained without the lossy table simplification seen in the local native
-caller. Finally, `ft call-peaks --fdr-table` calls and merges peaks using this
-table. Defaults are maximum FDR 0.05, minimum FIRE fraction 0.1 and a 200-bp
-local-maxima window. This fraction is an additional filter, not a replacement
-for FDR calibration. Peaks flagged outside the coverage limits are removed from
-the final BED. Logs are written under `logs_dir/05_fire_peaks/`.
+Configuration translation retains `max_fdr` -> `max_peak_fdr`,
+`min_fire_fraction` -> `min_frac_accessible`, `sd_coverage` ->
+`coverage_within_n_sd`, and optional element/fiber filters. `analysis_chromosomes`
+becomes the official chromosome regular expression. hg38 exclusion masks are
+added by FIRE itself, along with any `fire_peaks.exclude` files. The checkout
+fixes shuffle seed at 42 and the local-maxima window at 200 bp; unsupported
+values are rejected during preparation instead of silently ignored.
 
-Whole-chromosome pileups and peak calling use substantial memory. Each job
-declares `fire_peaks.mem_mb` (128000 MB by default); use
-`--resources mem_mb=256000` to cap the total memory scheduled for these jobs
-at 256000 MB, adjusting the value to your machine.
-
-The local `ft` 0.13.1 `call-peaks` implementation ignores its `--shuffled`
-argument and generates an internal background instead. Supplying our externally
-calibrated `--fdr-table` avoids that behavior; see `docs/validation.md` for the
-reproducing fixture. The standalone single-molecule FIRE BED from extraction
-remains a different output from these population peaks.
-
-This integrated branch does not reproduce every output or implementation detail
-of the full official FIRE workflow: wide peaks, track hubs and its additional
-reports are not generated here. To export inputs for that workflow:
-
-```bash
-snakemake -s workflow/fiberseq.smk prepare_fire_peaks --cores 8
-```
-
-This optional target creates an absolute-path `manifest.tsv` with `sample` and
-`bam` columns and a FIRE `config.yaml` inside `05_fire_peaks/`.
-Set `fire_peaks.reference_fasta` to a FASTA matching the alignment reference;
-an .mmi is insufficient for the official export. Run the official pipeline in
-a separate working directory after installing its per-rule dependencies:
-
-```bash
-mkdir -p results/fire_peaks_run
-cd results/fire_peaks_run
-pixi run --manifest-path /data/tenghaohan/software/FIRE/pixi.toml fire \
-  --configfile /absolute/path/to/results/05_fire_peaks/config.yaml \
-  --software-deployment-method conda --cores 16
-```
-
-Whole-genome peak calling needs adequate effective coverage. Synthetic fixtures
-can validate file dependencies, null-background handling and the numerical
-calling path; they do not establish biological accuracy, full-sample peak
-quality or equivalence to the official workflow. Exporting configuration does
-not mean the full official FIRE pipeline is installed or executed.
+The outer dry-run previews preparation and the launch job, not FIRE's internal
+DAG. After preparing inputs, inspect the inner plan with the same command shown
+in `docs/fire_peaks.md` plus `-n`. Inner progress and errors are captured in
+`logs_dir/06_fire_peaks/official.log`; reference preparation logs are in
+`prepare.log`. The author manages intermediate files and restart state inside
+its own work directory.
 
 ## Validation
 
 See `docs/validation.md` for execution evidence and remaining limitations.
+
+## Independent plotting
+
+Plotting scripts and configurations live in [`plotting/`](plotting/README.md),
+with numbered topic directories: `01_alignment`, `02_qc`, `03_fire_compare`,
+`04_nucleosome`, `05_figureA` and `06_tss`. Plots are run directly, outside
+Snakemake. Alignment comparisons have three self-contained numbered scripts
+for read length, depth and median summaries; edit the settings at the top of
+each script and run it directly against existing samtools statistics.
+
+The former `results/11_visualization/` and `results/12_fire_compare/` directories
+have moved intact to `analysis/11_visualization/` and `analysis/12_fire_compare/`.
+The latter retains its comparison tables, BEDs, rankings, chunk state and plots.
+Other numbered analysis results remain under `results/`. Generated files under
+`analysis/` are ignored by Git.
+
+```bash
+# Inspect a self-contained plotting entry point.
+/data/tenghaohan/miniconda3/envs/fiberseq/bin/python \
+  plotting/04_nucleosome/plot_nucleosome.py --help
+
+# Figure A uses the configuration beside its plotting command.
+bash plotting/05_figureA/plot.sh
+```
+
+The legacy single-sample QC and FIRE comparison scripts still depend
+on a previously removed `_common.py`; see the plotting README before using them.
+The standalone numbered alignment and QC scripts do not need this shared code.
+The remaining plotting scripts and configurations were relocated without
+changing their scientific parameters. See the numbered directory guide for
+inputs, outputs and current dependencies.
