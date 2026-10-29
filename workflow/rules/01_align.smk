@@ -49,3 +49,43 @@ else:
             samtools sort -@ {threads} -o {output.bam:q} {input.bam:q} \
                 > {log.out:q} 2> {log.err:q}
             """
+
+
+rule filter_aligned_chromosomes:
+    input:
+        bam=f"{RESULTS}/01_align/{{sample}}.aligned.bam",
+        script=str(Path(workflow.basedir).parent / "scripts/01filter_chromosomes.py")
+    output:
+        bam=f"{RESULTS}/01_align/{{sample}}.chromosomes.bam"
+    params:
+        chromosomes=ANALYSIS_CHROMOSOMES
+    threads: config["threads"]["align"]
+    log:
+        out=f"{LOGS}/01_align/{{sample}}.chromosomes.out",
+        err=f"{LOGS}/01_align/{{sample}}.chromosomes.err"
+    shell:
+        r"""
+        mkdir -p "$(dirname {output.bam:q})" "$(dirname {log.out:q})"
+        {PYTHON:q} {input.script:q} --bam {input.bam:q} --output {output.bam:q} \
+            --threads {threads} --chromosomes {params.chromosomes:q} \
+            > {log.out:q} 2> {log.err:q}
+        """
+
+
+rule index_aligned_chromosomes:
+    input:
+        bam=f"{RESULTS}/01_align/{{sample}}.chromosomes.bam"
+    output:
+        bai=f"{RESULTS}/01_align/{{sample}}.chromosomes.bam.bai"
+    params:
+        samtools=str(Path(config.get("tools", {}).get("bin_dir") or "") / "samtools")
+    threads: config["threads"]["align"]
+    log:
+        out=f"{LOGS}/01_align/{{sample}}.chromosomes_index.out",
+        err=f"{LOGS}/01_align/{{sample}}.chromosomes_index.err"
+    shell:
+        r"""
+        mkdir -p "$(dirname {log.out:q})"
+        {params.samtools:q} index -@ {threads} {input.bam:q} {output.bai:q} \
+            > {log.out:q} 2> {log.err:q}
+        """

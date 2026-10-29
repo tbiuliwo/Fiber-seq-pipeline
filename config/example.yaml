@@ -1,6 +1,8 @@
 # Copy and edit paths before using on another machine.
 input_mode: modified
 input_aligned: false
+# Exact post-alignment whitelist; excludes chrM, alt and unplaced contigs.
+analysis_chromosomes: [chr1, chr2, chr3, chr4, chr5, chr6, chr7, chr8, chr9, chr10, chr11, chr12, chr13, chr14, chr15, chr16, chr17, chr18, chr19, chr20, chr21, chr22, chrX, chrY]
 reference: /path/to/reference.fa
 reference_name: hg38
 extract_coordinates: reference
@@ -17,11 +19,17 @@ threads:
   fiberfold: 4
   ctcf: 4
   fiberfold_inputs: 4
+  deepvariant: 16
+  haplotag: 4
+  methylation: 4
 results_dir: results
 logs_dir: logs
+# Set this to a directory on a disk with enough space for BAM sorting.
+tmp_dir: results/tmp
 tools:
   bin_dir: null
   python: python
+  bigtools: bigtools  # Standard bigWig converter (FIRE uses bigtools 0.5.8).
 qc:
   autocorrelation: true
 fiberhmm:
@@ -34,15 +42,22 @@ fiberfold:
   window_step: 2097152
 fire_peaks:
   enabled: true
+  # Must match the installed FIRE version (official default: major.minor).
+  version: v0.2
+  # Official FIRE checkout; its Snakefile is executed directly.
+  fire_dir: /path/to/FIRE
+  pixi: pixi
+  # Optional: reuse an existing official FIRE Conda environment directory.
+  # conda_prefix: /path/to/FIRE/fire-test-data/.snakemake/conda
   max_fdr: 0.05
   min_fire_fraction: 0.1
   min_coverage: 4
   sd_coverage: 5
   mem_mb: 128000
   seed: 42
-  # Supply matching gap/blacklist/segmental-duplication BED(.gz) files.
+  # Additional shuffle masks; official hg38 masks are added for hg38/GRCh38.
   exclude: []
-  # Only needed by the optional prepare_fire_peaks export target.
+  # FASTA used by the official peak branch; its index is built inside results.
   reference_fasta: /path/to/reference.fa
 ctcf:
   enabled: false
@@ -74,3 +89,31 @@ ctcf:
   - chr21
   - chr22
   - chrX
+  - chrY
+
+# Step 02: optional DeepVariant calling, WhatsHap phasing and aligned-BAM haplotagging.
+phasing:
+  enabled: false
+  container: /path/to/deepvariant_1.10.0.sif
+  singularity: singularity
+  # Bind all directories containing the BAM, reference, container and outputs.
+  bind_paths: [/path/to/data:/path/to/data]
+  reference_fasta: null  # null reuses reference; supply FASTA + .fai, not .mmi.
+  mem_mb: 64000
+  whatshap: whatshap  # PATH, an explicit executable, or the --sdm conda environment.
+  whatshap_mem_mb: 16000
+  samtools: null  # null reuses tools.bin_dir, or PATH if tools.bin_dir is null.
+  tabix: null
+  samples: null  # all samples, or a list of sample IDs / output aliases.
+  sample_aliases: {}  # e.g. {sample01: WT}; omit to use full sample IDs.
+
+# Step 08: MethBat 5mC pileup and indexed 0-100% bedGraph tracks.
+methylation:
+  enabled: false
+  min_mapq: 1
+  min_coverage: 4
+  edge_trimming_size: 20
+  # Executables default to tools.bin_dir, or PATH if it is null.
+  # methbat: /path/to/methbat
+  # bgzip: /path/to/bgzip
+  # tabix: /path/to/tabix

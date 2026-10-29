@@ -1,15 +1,15 @@
 if MODE != "annotated":
     rule annotate_fibers:
         input:
-            bam=aligned_bam
+            bam=downstream_aligned_bam
         output:
-            bam=f"{RESULTS}/02_annotate/{{sample}}.fiber.bam"
+            bam=f"{RESULTS}/03_annotate/{{sample}}.fiber.bam"
         params:
             command="predict-m6a" if MODE == "hifi" else "add-nucleosomes"
         threads: config["threads"]["predict_m6a"]
         log:
-            out=f"{LOGS}/02_annotate/{{sample}}.out",
-            err=f"{LOGS}/02_annotate/{{sample}}.err"
+            out=f"{LOGS}/03_annotate/{{sample}}.out",
+            err=f"{LOGS}/03_annotate/{{sample}}.err"
         shell:
             r"""
             mkdir -p "$(dirname {output.bam:q})" "$(dirname {log.out:q})"

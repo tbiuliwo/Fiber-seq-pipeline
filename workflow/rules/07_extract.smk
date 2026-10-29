@@ -1,13 +1,13 @@
-# 06. Feature extraction
+# 07. Feature extraction
 
 rule extract_features:
     input:
-        bam=f"{RESULTS}/04_fire/{{sample}}.fire.bam"
+        bam=f"{RESULTS}/05_fire/{{sample}}.fire.bam"
     output:
-        m6a=f"{RESULTS}/06_extract/{{sample}}.m6a.bed.gz",
-        cpg=f"{RESULTS}/06_extract/{{sample}}.cpg.bed.gz",
-        nuc=f"{RESULTS}/06_extract/{{sample}}.nuc.bed.gz",
-        msp=f"{RESULTS}/06_extract/{{sample}}.msp.bed.gz"
+        m6a=f"{RESULTS}/07_extract/{{sample}}.m6a.bed.gz",
+        cpg=f"{RESULTS}/07_extract/{{sample}}.cpg.bed.gz",
+        nuc=f"{RESULTS}/07_extract/{{sample}}.nuc.bed.gz",
+        msp=f"{RESULTS}/07_extract/{{sample}}.msp.bed.gz"
     threads:
         config["threads"]["extract"]
     params:
@@ -17,8 +17,8 @@ rule extract_features:
             else "--molecular"
         )
     log:
-        out=f"{LOGS}/06_extract/{{sample}}.out",
-        err=f"{LOGS}/06_extract/{{sample}}.err"
+        out=f"{LOGS}/07_extract/{{sample}}.out",
+        err=f"{LOGS}/07_extract/{{sample}}.err"
     shell:
         r"""
         set -euo pipefail
@@ -40,14 +40,14 @@ rule extract_features:
 
 rule extract_fire:
     input:
-        bam=f"{RESULTS}/04_fire/{{sample}}.fire.bam"
+        bam=f"{RESULTS}/05_fire/{{sample}}.fire.bam"
     output:
-        bed=f"{RESULTS}/06_extract/{{sample}}.fire.bed.gz"
+        bed=f"{RESULTS}/07_extract/{{sample}}.fire.bed.gz"
     threads:
         config["threads"]["extract"]
     log:
-        out=f"{LOGS}/06_extract/{{sample}}.fire.out",
-        err=f"{LOGS}/06_extract/{{sample}}.fire.err"
+        out=f"{LOGS}/07_extract/{{sample}}.fire.out",
+        err=f"{LOGS}/07_extract/{{sample}}.fire.err"
     shell:
         r"""
         set -euo pipefail

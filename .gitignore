@@ -14,8 +14,10 @@ data/
 *.gzi
 *.mmi
 
-# Analysis results
+# Analysis results and generated figures
 results/
+/figures/
+/analysis/
 logs/
 /test_run/
 /tests/
@@ -42,4 +44,8 @@ __pycache__/
 
 # Temporary files
 *.tmp
-/docs/
+# Keep existing local notes ignored, but version the optional-branch instructions.
+/docs/*
+!/docs/phasing.md
+!/docs/methylation.md
+!/docs/workflow_renumbering.md
